@@ -1,0 +1,2 @@
+export const body = (schema) => (req, res, next) => { req.body = schema.parse(req.body ?? {}); next(); };
+export const query = (schema) => (req, res, next) => { req.query = schema.parse(req.query ?? {}); next(); };
