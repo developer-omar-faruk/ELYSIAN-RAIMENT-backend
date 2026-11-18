@@ -24,7 +24,7 @@ for (const [i, c] of D.CATEGORIES.entries()) {
 }
 for (const [i, p] of D.PRODUCTS.entries()) {
   await Product.updateOne({ id: p.id }, { $setOnInsert: {
-    id: p.id, slug: p.slug, sku: `RG-${p.id.toUpperCase()}`, name: p.name, category: p.category, price: p.price, oldPrice: p.oldPrice ?? null,
+    id: p.id, slug: p.slug, sku: `ER-${p.id.toUpperCase()}`, name: p.name, category: p.category, price: p.price, oldPrice: p.oldPrice ?? null,
     sizes: p.sizes, colors: p.colors, rating: p.rating, reviewCount: p.reviews, stock: p.stock, images: p.images,
     newArrival: !!p.isNew, trending: !!p.trending, featured: !!p.featured, description: p.description, fabric: p.fabric, published: true,
     createdAt: new Date(now - i * 86_400_000), updatedAt: new Date(),

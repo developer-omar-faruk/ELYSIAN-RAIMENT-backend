@@ -30,7 +30,7 @@ export const listProducts = asyncHandler(async (req, res) => {
 export const createProduct = asyncHandler(async (req, res) => {
   const fields = await buildProductFields(req.body);
   const id = req.body.id || `p${Date.now().toString(36)}${randomToken(3).toLowerCase().replace(/[^a-z0-9]/g, 'x')}`;
-  const product = await Product.create({ ...fields, id, slug: await uniqueSlug(fields.name), sku: req.body.sku || `RG-${id.toUpperCase()}` });
+  const product = await Product.create({ ...fields, id, slug: await uniqueSlug(fields.name), sku: req.body.sku || `ER-${id.toUpperCase()}` });
   res.status(201).json(adminProduct(product));
 });
 

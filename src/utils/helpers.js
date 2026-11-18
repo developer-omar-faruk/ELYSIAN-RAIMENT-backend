@@ -16,7 +16,7 @@ export function newOrderId() {
   const bytes = crypto.randomBytes(10);
   let s = '';
   for (const b of bytes) s += ALPHABET[b % 32];
-  return `RG-${s}`;
+  return `ER-${s}`;
 }
 
 export const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
