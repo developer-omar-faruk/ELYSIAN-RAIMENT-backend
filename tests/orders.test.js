@@ -3,7 +3,7 @@ import request from 'supertest';
 import { adminAgent, boot } from './helpers.js';
 
 let ctx, app, admin;
-const customer = { name: 'Rima Akter', phone: '01712345678', email: 'rima@example.com' };
+const customer = { name: 'Rima Akter', phone: '01712345678', email: '' };
 const order = (over = {}) => ({ customer, address: 'House 1, Road 2, Dhaka', area: '', note: '', zone: 'dhaka', items: [{ id: 'tp1', size: 'M', color: '', qty: 1 }], coupon: '', ...over });
 const stockOf = async () => (await admin.get('/api/admin/products?q=tp1')).body.items[0].stock;
 

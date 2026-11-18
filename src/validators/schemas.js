@@ -106,7 +106,7 @@ export const settingsInput = z.object({
 
 // ---------- Orders ----------
 export const orderInput = z.object({
-  customer: z.object({ name: t(100).min(1), phone, email: z.string().trim().toLowerCase().email().max(150) }),
+  customer: z.object({ name: t(100).min(1), phone, email: z.union([z.literal(''), t(150).email()]).default('') }),
   address: t(500).min(1), area: t(200).default(''), note: t(500).default(''),
   zone: t(40).min(1),
   items: z.array(z.object({ id: t(40).min(1), size: t(40).min(1), color: t(40).default(''), qty: z.coerce.number().int().min(1).max(20) })).min(1).max(30),
