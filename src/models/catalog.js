@@ -33,6 +33,7 @@ const productSchema = new Schema({
 }, { timestamps: true });
 productSchema.index({ published: 1, createdAt: -1 });
 productSchema.index({ name: 1 });
+productSchema.index({ stock: 1 });
 productSchema.pre('validate', function () {
   if (this.variants?.length) this.stock = this.variants.reduce((s, v) => s + (Number(v.stock) || 0), 0);
 });
@@ -46,6 +47,7 @@ const categorySchema = new Schema({
   published: { type: Boolean, default: true },
   order: { type: Number, default: 0, index: true },
 }, { timestamps: true });
+categorySchema.index({ published: 1, order: 1 });
 export const Category = model('Category', categorySchema);
 
 const bannerSchema = new Schema({
@@ -58,4 +60,5 @@ const bannerSchema = new Schema({
   active: { type: Boolean, default: true },
   order: { type: Number, default: 0, index: true },
 }, { timestamps: true });
+bannerSchema.index({ active: 1, order: 1 });
 export const Banner = model('Banner', bannerSchema);

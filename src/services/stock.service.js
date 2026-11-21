@@ -17,3 +17,4 @@ export async function adjustStock({ productRef, variantId, delta, session, track
 }
 
 export const logMovement = (doc, session) => StockMovement.create([doc], { session });
+export const logMovements = (docs, session) => docs.length ? StockMovement.insertMany(docs, { session }) : Promise.resolve([]);

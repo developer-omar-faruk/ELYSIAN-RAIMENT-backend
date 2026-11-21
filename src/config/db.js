@@ -14,9 +14,9 @@ mongoose.set('strictQuery', true);
 export async function connectDb() {
   mongoose.connection.on('disconnected', () => logger.warn('MongoDB disconnected'));
   mongoose.connection.on('reconnected', () => logger.info('MongoDB reconnected'));
-  await mongoose.connect(env.MONGODB_URI, { serverSelectionTimeoutMS: 8000, maxPoolSize: 20 });
+  await mongoose.connect(env.MONGODB_URI, { serverSelectionTimeoutMS: 8000, maxPoolSize: 20, autoIndex: false });
+  await Promise.all(mongoose.modelNames().map((name) => mongoose.model(name).createIndexes()));
   await mongoose.connection.db.admin().ping();
-  await mongoose.syncIndexes();
   logger.info('MongoDB connected');
 }
 

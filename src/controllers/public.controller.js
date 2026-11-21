@@ -8,6 +8,7 @@ import { publicProduct } from '../services/product.service.js';
 import { createOrder, storefrontOrder } from '../services/order.service.js';
 import { evalCoupon } from '../services/coupon.service.js';
 import { notifyNewOrder } from '../services/email.service.js';
+import { getBootstrapCache } from '../services/bootstrap-cache.js';
 
 export const health = async (req, res) => {
   const ok = await dbHealthy();
@@ -17,23 +18,28 @@ export const health = async (req, res) => {
 const strip = (o) => { if (!o) return {}; const { _id, ...rest } = o; return rest; };
 
 export const bootstrap = asyncHandler(async (req, res) => {
-  const [products, categories, banners, reviews, s] = await Promise.all([
-    Product.find({ published: true }).sort({ createdAt: -1 }).lean(),
-    Category.find({ published: true }).sort({ order: 1 }).lean(),
-    Banner.find({ active: true }).sort({ order: 1 }).lean(),
-    Review.find({ approved: true }).sort({ createdAt: -1 }).limit(12).lean(),
-    getSettings(),
-  ]);
-  const pub = products.map(publicProduct);
-  res.set('Cache-Control', 'no-store').json({
-    products: pub,
-    categories: categories.map((c) => ({ slug: c.slug, name: c.name, desc: c.desc, image: c.image })),
-    banners: banners.map((b) => ({ image: b.image, title: b.title, text: b.subtitle, pos: b.pos, button: b.button, link: b.link })),
-    reviews: reviews.map((r) => ({ name: r.name, city: r.city, rating: r.rating, text: r.text, image: r.image })),
-    home: { featuredIds: pub.filter((p) => p.featured).map((p) => p.id), trendingIds: pub.filter((p) => p.trending).map((p) => p.id) },
-    brand: strip(s.brand), contact: strip(s.contact), policies: strip(s.policies), newsletter: strip(s.newsletter),
-    zones: s.zones.map((z) => ({ id: z.id, label: z.label, fee: z.fee, note: z.note })),
+  const data = await getBootstrapCache(async () => {
+    const [products, categories, banners, reviews, s] = await Promise.all([
+      Product.find({ published: true })
+        .select('id slug name category price oldPrice sizes colors rating reviewCount stock images newArrival trending featured sold createdAt description fabric')
+        .sort({ createdAt: -1 }).lean(),
+      Category.find({ published: true }).select('slug name desc image').sort({ order: 1 }).lean(),
+      Banner.find({ active: true }).select('image title subtitle pos button link').sort({ order: 1 }).lean(),
+      Review.find({ approved: true }).select('name city rating text image').sort({ createdAt: -1 }).limit(12).lean(),
+      getSettings(),
+    ]);
+    const pub = products.map(publicProduct);
+    return {
+      products: pub,
+      categories: categories.map((c) => ({ slug: c.slug, name: c.name, desc: c.desc, image: c.image })),
+      banners: banners.map((b) => ({ image: b.image, title: b.title, text: b.subtitle, pos: b.pos, button: b.button, link: b.link })),
+      reviews: reviews.map((r) => ({ name: r.name, city: r.city, rating: r.rating, text: r.text, image: r.image })),
+      home: { featuredIds: pub.filter((p) => p.featured).map((p) => p.id), trendingIds: pub.filter((p) => p.trending).map((p) => p.id) },
+      brand: strip(s.brand), contact: strip(s.contact), policies: strip(s.policies), newsletter: strip(s.newsletter),
+      zones: s.zones.map((z) => ({ id: z.id, label: z.label, fee: z.fee, note: z.note })),
+    };
   });
+  res.set('Cache-Control', 'no-store').json(data);
 });
 
 export const placeOrder = asyncHandler(async (req, res) => {

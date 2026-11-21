@@ -8,7 +8,7 @@ import { Banner, Category, Product } from '../src/models/catalog.js';
 import { Coupon, Review } from '../src/models/commerce.js';
 import { Settings } from '../src/models/system.js';
 
-const candidates = [process.argv[2], '../my-project/src/data.js', '../my-project/scr/data.js'].filter(Boolean).map((p) => path.resolve(process.cwd(), p));
+const candidates = [process.argv[2], '../my-project/src/data.js'].filter(Boolean).map((p) => path.resolve(process.cwd(), p));
 const file = candidates.find((p) => fs.existsSync(p));
 if (!file) { console.error('Could not find data.js. Pass its path as the first argument.'); process.exit(1); }
 

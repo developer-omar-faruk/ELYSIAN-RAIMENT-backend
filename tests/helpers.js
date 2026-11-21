@@ -8,6 +8,7 @@ export async function boot(extraEnv = {}) {
   const repl = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
   Object.assign(process.env, {
     NODE_ENV: 'test', MONGODB_URI: repl.getUri(), CLIENT_ORIGIN: ORIGIN, LOG_LEVEL: 'silent',
+    COOKIE_SAMESITE: 'lax',
     JWT_ACCESS_SECRET: 'a'.repeat(40), JWT_REFRESH_SECRET: 'b'.repeat(40), COOKIE_SECRET: 'c'.repeat(40),
     INITIAL_ADMIN_SETUP_TOKEN: 't'.repeat(32), LOGIN_MAX: '50', REFRESH_GRACE_MS: '1', ...extraEnv,
   });

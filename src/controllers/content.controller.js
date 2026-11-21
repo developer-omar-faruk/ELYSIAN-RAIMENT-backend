@@ -5,6 +5,7 @@ import { asyncHandler, HttpError } from '../utils/errors.js';
 import { slugify, todayStr } from '../utils/helpers.js';
 import { getSettings } from '../services/settings.service.js';
 import { deleteImages } from '../services/upload.service.js';
+import { invalidateBootstrapCache } from '../services/bootstrap-cache.js';
 
 // ---------- Categories ----------
 export const listCategories = asyncHandler(async (req, res) => {
@@ -18,6 +19,7 @@ export const createCategory = asyncHandler(async (req, res) => {
   for (let n = 2; await Category.exists({ slug }); n++) slug = `${base}-${n}`;
   const last = await Category.findOne().sort({ order: -1 }).select('order').lean();
   const c = await Category.create({ ...req.body, slug, order: (last?.order ?? -1) + 1 });
+  invalidateBootstrapCache();
   res.status(201).json(c);
 });
 export const updateCategory = asyncHandler(async (req, res) => {
@@ -26,6 +28,7 @@ export const updateCategory = asyncHandler(async (req, res) => {
   const removed = old.image && old.image !== req.body.image ? [old.image] : [];
   old.set(req.body);
   await old.save();
+  invalidateBootstrapCache();
   deleteImages(removed);
   res.json(old);
 });
@@ -34,11 +37,13 @@ export const deleteCategory = asyncHandler(async (req, res) => {
   if (n) throw new HttpError(409, `This category still has ${n} product(s). Move or delete them first.`);
   const c = await Category.findOneAndDelete({ slug: req.params.slug });
   if (!c) throw new HttpError(404, 'Category not found.');
+  invalidateBootstrapCache();
   deleteImages([c.image]);
   res.json({ ok: true });
 });
 export const reorderCategories = asyncHandler(async (req, res) => {
   await Category.bulkWrite(req.body.slugs.map((slug, order) => ({ updateOne: { filter: { slug }, update: { $set: { order } } } })));
+  invalidateBootstrapCache();
   res.json({ ok: true });
 });
 
@@ -46,7 +51,9 @@ export const reorderCategories = asyncHandler(async (req, res) => {
 export const listBanners = asyncHandler(async (req, res) => res.json({ items: await Banner.find({}).sort({ order: 1 }).lean() }));
 export const createBanner = asyncHandler(async (req, res) => {
   const last = await Banner.findOne().sort({ order: -1 }).select('order').lean();
-  res.status(201).json(await Banner.create({ ...req.body, order: (last?.order ?? -1) + 1 }));
+  const banner = await Banner.create({ ...req.body, order: (last?.order ?? -1) + 1 });
+  invalidateBootstrapCache();
+  res.status(201).json(banner);
 });
 export const updateBanner = asyncHandler(async (req, res) => {
   const b = await Banner.findById(req.params.id);
@@ -54,17 +61,20 @@ export const updateBanner = asyncHandler(async (req, res) => {
   const removed = b.image !== req.body.image ? [b.image] : [];
   b.set(req.body);
   await b.save();
+  invalidateBootstrapCache();
   deleteImages(removed);
   res.json(b);
 });
 export const deleteBanner = asyncHandler(async (req, res) => {
   const b = await Banner.findByIdAndDelete(req.params.id);
   if (!b) throw new HttpError(404, 'Banner not found.');
+  invalidateBootstrapCache();
   deleteImages([b.image]);
   res.json({ ok: true });
 });
 export const reorderBanners = asyncHandler(async (req, res) => {
   await Banner.bulkWrite(req.body.ids.map((id, order) => ({ updateOne: { filter: { _id: id }, update: { $set: { order } } } })));
+  invalidateBootstrapCache();
   res.json({ ok: true });
 });
 
@@ -89,10 +99,12 @@ export const listReviews = asyncHandler(async (req, res) => {
 export const patchReview = asyncHandler(async (req, res) => {
   const r = await Review.findByIdAndUpdate(req.params.id, { $set: { approved: req.body.approved } }, { new: true });
   if (!r) throw new HttpError(404, 'Review not found.');
+  invalidateBootstrapCache();
   res.json(r);
 });
 export const deleteReview = asyncHandler(async (req, res) => {
   if (!(await Review.findByIdAndDelete(req.params.id))) throw new HttpError(404, 'Review not found.');
+  invalidateBootstrapCache();
   res.json({ ok: true });
 });
 
@@ -111,5 +123,6 @@ export const putSettings = asyncHandler(async (req, res) => {
   });
   await getSettings();
   await Settings.updateOne({ key: 'store' }, { $set: { ...req.body, zones } });
+  invalidateBootstrapCache();
   res.json({ ok: true });
 });

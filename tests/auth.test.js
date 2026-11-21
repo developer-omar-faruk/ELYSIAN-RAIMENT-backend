@@ -27,7 +27,7 @@ describe('admin authentication', () => {
   });
 
   it('handles simultaneous setup requests safely', async () => {
-    // Owner already exists here, so every concurrent attempt must fail [1,2,3 this is previous code]
+    // Owner already exists here, so every concurrent attempt must fail.
     const rs = await Promise.all([1, 2].map((n) =>  request(app).post('/api/admin/setup').send({ ...OWNER, email: `r${n}@example.com`, token: process.env.INITIAL_ADMIN_SETUP_TOKEN })));
     expect(rs.every((r) => r.status === 409)).toBe(true);
   });

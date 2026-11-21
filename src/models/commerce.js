@@ -65,6 +65,7 @@ const reviewSchema = new Schema({
   productName: String,
   approved: { type: Boolean, default: true },
 }, { timestamps: true });
+reviewSchema.index({ approved: 1, createdAt: -1 });
 export const Review = model('Review', reviewSchema);
 
 const movementSchema = new Schema({

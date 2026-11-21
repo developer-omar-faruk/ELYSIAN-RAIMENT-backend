@@ -1,7 +1,7 @@
 import { Order } from '../models/commerce.js';
 import { asyncHandler, HttpError } from '../utils/errors.js';
 import { dayEnd, dayStart, escapeRegex } from '../utils/helpers.js';
-import { adminOrder, changeStatus, setPaymentStatus, updateDelivery } from '../services/order.service.js';
+import { adminOrder, changeStatus, patchAdminOrder } from '../services/order.service.js';
 import { notifyStatus } from '../services/email.service.js';
 
 export const listOrders = asyncHandler(async (req, res) => {
@@ -26,16 +26,9 @@ const load = async (id) => {
 export const getOrder = asyncHandler(async (req, res) => res.json(adminOrder(await load(req.params.id))));
 
 export const patchOrder = asyncHandler(async (req, res) => {
-  const { status, paymentStatus, delivery } = req.body;
-  const by = req.admin.email;
-  const id = req.params.id;
-  if (delivery) await updateDelivery(id, delivery, by);
-  if (paymentStatus) await setPaymentStatus(id, paymentStatus, by);
-  if (status) {
-    const r = await changeStatus(id, status, by);
-    if (r.changed) notifyStatus(r.order);
-  }
-  res.json(adminOrder(await load(id)));
+  const result = await patchAdminOrder(req.params.id, req.body, req.admin.email);
+  if (result.statusChanged) notifyStatus(result.order);
+  res.json(adminOrder(result.order));
 });
 
 export const addNote = asyncHandler(async (req, res) => {

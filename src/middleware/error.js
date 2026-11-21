@@ -4,6 +4,7 @@ import { HttpError } from '../utils/errors.js';
 export const notFound = (req, res) => res.status(404).json({ error: 'Not found.' });
 
 export function errorHandler(err, req, res, next) { // eslint-disable-line no-unused-vars
+  if (res.headersSent) return next(err);
   if (err instanceof ZodError) {
     const i = err.issues[0];
     const path = i.path.join('.');

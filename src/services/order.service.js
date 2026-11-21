@@ -6,7 +6,8 @@ import { STATUSES, TRANSITIONS, statusIndex } from '../utils/constants.js';
 import { atomic } from '../utils/tx.js';
 import { getSettings } from './settings.service.js';
 import { evalCoupon } from './coupon.service.js';
-import { adjustStock, logMovement } from './stock.service.js';
+import { adjustStock, logMovements } from './stock.service.js';
+import { invalidateBootstrapCache } from './bootstrap-cache.js';
 
 // ---------- Shapes ----------
 export const storefrontOrder = (o) => ({
@@ -56,8 +57,14 @@ export async function createOrder(input, { idemKey } = {}) {
     const order = await atomic(async (session, undo) => {
       const items = [];
       let subtotal = 0;
+      const products = await Product.find({ id: { $in: lines.map((l) => l.id) }, published: true })
+        .select('id category name sizes colors variants price images')
+        .session(session)
+        .lean();
+      const productsById = new Map(products.map((p) => [p.id, p]));
+
       for (const l of lines) {
-        const p = await Product.findOne({ id: l.id, published: true }).session(session);
+        const p = productsById.get(l.id);
         if (!p) throw new HttpError(400, 'An item in your cart is no longer available.');
         if (!p.sizes.includes(l.size)) throw new HttpError(400, `Size ${l.size} is not available for ${p.name}.`);
         if (l.color && !p.colors.includes(l.color)) throw new HttpError(400, `Colour ${l.color} is not available for ${p.name}.`);
@@ -96,11 +103,13 @@ export async function createOrder(input, { idemKey } = {}) {
         timeline: [{ label: 'Order placed', by: 'customer' }],
       }], { session });
 
-      for (const it of items) {
-        await logMovement({ productId: it.productId, name: it.name, size: it.size, color: it.color, delta: -it.qty, reason: 'Order placed', by: 'system', orderId: created.id }, session);
-      }
+      await logMovements(items.map((it) => ({
+        productId: it.productId, name: it.name, size: it.size, color: it.color,
+        delta: -it.qty, reason: 'Order placed', by: 'system', orderId: created.id,
+      })), session);
       return created;
     });
+    invalidateBootstrapCache();
     return { order };
   } catch (e) {
     if (e.code === 11000) {
@@ -112,48 +121,90 @@ export async function createOrder(input, { idemKey } = {}) {
 }
 
 // ---------- Admin changes ----------
-export async function changeStatus(id, to, by) {
+async function prepareStatusChange(o, to, by, session, undo) {
   if (!STATUSES.includes(to)) throw new HttpError(400, 'Unknown status.');
-  return atomic(async (session, undo) => {
+  if (o.status === to) return { set: {}, timeline: [], changed: false };
+  if (!(TRANSITIONS[o.status] || []).includes(to)) throw new HttpError(409, `An order cannot change from ${o.status} to ${to}.`);
+
+  const set = { status: to };
+  if (to === 'Cancelled' && !o.stockRestored) {
+    const movements = [];
+    for (const it of o.items) {
+      if (!it.productRef) continue;
+      await adjustStock({ productRef: it.productRef, variantId: it.variantId, delta: it.qty, session, trackSold: true });
+      undo.push(() => adjustStock({ productRef: it.productRef, variantId: it.variantId, delta: -it.qty, trackSold: true }));
+      movements.push({ productId: it.productId, name: it.name, size: it.size, color: it.color, delta: it.qty, reason: 'Order cancelled, stock restored', by, orderId: o.id });
+    }
+    await logMovements(movements, session);
+    if (o.coupon) await Coupon.updateOne({ code: o.coupon, used: { $gt: 0 } }, { $inc: { used: -1 } }, { session });
+    set.stockRestored = true;
+  }
+  return {
+    set,
+    timeline: [{ label: `Status changed from ${o.status} to ${to}`, by }],
+    changed: true,
+  };
+}
+
+async function saveOrderChanges(o, set, timeline, session) {
+  if (!timeline.length) return o;
+  const updated = await Order.findOneAndUpdate(
+    { id: o.id, status: o.status, paymentStatus: o.paymentStatus },
+    { $set: set, $push: { timeline: { $each: timeline } } },
+    { new: true, session },
+  );
+  if (!updated) throw new HttpError(409, 'The order was changed by someone else. Please refresh and try again.');
+  return updated;
+}
+
+export async function changeStatus(id, to, by) {
+  const result = await atomic(async (session, undo) => {
     const o = await Order.findOne({ id }).session(session);
     if (!o) throw new HttpError(404, 'Order not found.');
-    if (o.status === to) return { order: o, changed: false };
-    if (!(TRANSITIONS[o.status] || []).includes(to)) throw new HttpError(409, `An order cannot change from ${o.status} to ${to}.`);
-    const set = { status: to };
-    if (to === 'Cancelled' && !o.stockRestored) {
-      for (const it of o.items) {
-        if (!it.productRef) continue;
-        await adjustStock({ productRef: it.productRef, variantId: it.variantId, delta: it.qty, session, trackSold: true });
-        undo.push(() => adjustStock({ productRef: it.productRef, variantId: it.variantId, delta: -it.qty, trackSold: true }));
-        await logMovement({ productId: it.productId, name: it.name, size: it.size, color: it.color, delta: it.qty, reason: 'Order cancelled, stock restored', by, orderId: o.id }, session);
-      }
-      if (o.coupon) await Coupon.updateOne({ code: o.coupon, used: { $gt: 0 } }, { $inc: { used: -1 } }, { session });
-      set.stockRestored = true;
-    }
-    const upd = await Order.findOneAndUpdate(
-      { id, status: o.status },
-      { $set: set, $push: { timeline: { label: `Status changed from ${o.status} to ${to}`, by } } },
-      { new: true, session },
-    );
-    if (!upd) throw new HttpError(409, 'The order was changed by someone else. Please refresh and try again.');
-    return { order: upd, changed: true };
+    const statusChange = await prepareStatusChange(o, to, by, session, undo);
+    return {
+      order: await saveOrderChanges(o, statusChange.set, statusChange.timeline, session),
+      changed: statusChange.changed,
+    };
   });
+  if (result.changed && to === 'Cancelled') invalidateBootstrapCache();
+  return result;
 }
 
-export async function setPaymentStatus(id, paymentStatus, by) {
-  const o = await Order.findOne({ id });
-  if (!o) throw new HttpError(404, 'Order not found.');
-  if (o.paymentStatus === paymentStatus) return o;
-  if (o.status === 'Cancelled' && paymentStatus === 'Paid') throw new HttpError(409, 'A cancelled order cannot be marked as paid.');
-  return Order.findOneAndUpdate({ id }, { $set: { paymentStatus }, $push: { timeline: { label: `Payment marked ${paymentStatus}`, by } } }, { new: true });
-}
+export async function patchAdminOrder(id, changes, by) {
+  const result = await atomic(async (session, undo) => {
+    const o = await Order.findOne({ id }).session(session);
+    if (!o) throw new HttpError(404, 'Order not found.');
 
-export async function updateDelivery(id, d, by) {
-  const o = await Order.findOne({ id });
-  if (!o) throw new HttpError(404, 'Order not found.');
-  if (['Cancelled', 'Refunded', 'Completed'].includes(o.status)) throw new HttpError(409, `Delivery details cannot be edited on a ${o.status.toLowerCase()} order.`);
-  return Order.findOneAndUpdate({ id }, {
-    $set: { 'customer.name': d.name, 'customer.phone': d.phone, address: d.address, area: d.area, note: d.note },
-    $push: { timeline: { label: 'Delivery details edited', by } },
-  }, { new: true });
+    const set = {};
+    const timeline = [];
+    if (changes.delivery) {
+      if (['Cancelled', 'Refunded', 'Completed'].includes(o.status)) throw new HttpError(409, `Delivery details cannot be edited on a ${o.status.toLowerCase()} order.`);
+      set['customer.name'] = changes.delivery.name;
+      set['customer.phone'] = changes.delivery.phone;
+      set.address = changes.delivery.address;
+      set.area = changes.delivery.area;
+      set.note = changes.delivery.note;
+      timeline.push({ label: 'Delivery details edited', by });
+    }
+    if (changes.paymentStatus && changes.paymentStatus !== o.paymentStatus) {
+      if (o.status === 'Cancelled' && changes.paymentStatus === 'Paid') throw new HttpError(409, 'A cancelled order cannot be marked as paid.');
+      set.paymentStatus = changes.paymentStatus;
+      timeline.push({ label: `Payment marked ${changes.paymentStatus}`, by });
+    }
+    let statusChanged = false;
+    if (changes.status) {
+      const statusChange = await prepareStatusChange(o, changes.status, by, session, undo);
+      Object.assign(set, statusChange.set);
+      timeline.push(...statusChange.timeline);
+      statusChanged = statusChange.changed;
+    }
+
+    return {
+      order: await saveOrderChanges(o, set, timeline, session),
+      statusChanged,
+    };
+  });
+  if (result.statusChanged && result.order.status === 'Cancelled') invalidateBootstrapCache();
+  return result;
 }
