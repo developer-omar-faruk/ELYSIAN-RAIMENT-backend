@@ -4,9 +4,9 @@ import { randomToken, slugify } from '../utils/helpers.js';
 
 export const publicProduct = (p) => ({
   id: p.id, slug: p.slug, name: p.name, category: p.category, price: p.price, oldPrice: p.oldPrice ?? null,
-  sizes: p.sizes, colors: p.colors, rating: p.rating, reviews: p.reviewCount, stock: p.stock, images: p.images,
-  isNew: p.newArrival, trending: p.trending, featured: p.featured, popularity: p.reviewCount + (p.sold || 0),
-  createdAt: +new Date(p.createdAt), description: p.description, fabric: p.fabric,
+  sizes: p.sizes, colors: p.colors, rating: 0, reviews: 0, stock: p.stock, images: p.images,
+  isNew: p.newArrival, trending: p.trending, featured: p.featured, popularity: p.sold || 0,
+  createdAt: +new Date(p.createdAt), description: p.description?.replace(/^A everyday\b/i, 'An everyday') || '', fabric: p.fabric,
 });
 
 export const adminProduct = (p) => ({

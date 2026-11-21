@@ -5,7 +5,7 @@ import path from 'node:path';
 import mongoose from 'mongoose';
 import { connectDb } from '../src/config/db.js';
 import { Banner, Category, Product } from '../src/models/catalog.js';
-import { Coupon, Review } from '../src/models/commerce.js';
+import { Coupon } from '../src/models/commerce.js';
 import { Settings } from '../src/models/system.js';
 
 const candidates = [process.argv[2], '../my-project/src/data.js'].filter(Boolean).map((p) => path.resolve(process.cwd(), p));
@@ -25,7 +25,7 @@ for (const [i, c] of D.CATEGORIES.entries()) {
 for (const [i, p] of D.PRODUCTS.entries()) {
   await Product.updateOne({ id: p.id }, { $setOnInsert: {
     id: p.id, slug: p.slug, sku: `ER-${p.id.toUpperCase()}`, name: p.name, category: p.category, price: p.price, oldPrice: p.oldPrice ?? null,
-    sizes: p.sizes, colors: p.colors, rating: p.rating, reviewCount: p.reviews, stock: p.stock, images: p.images,
+    sizes: p.sizes, colors: p.colors, stock: p.stock, images: p.images,
     newArrival: !!p.isNew, trending: !!p.trending, featured: !!p.featured, description: p.description, fabric: p.fabric, published: true,
     createdAt: new Date(now - i * 86_400_000), updatedAt: new Date(),
   } }, { upsert: true, timestamps: false });
@@ -33,7 +33,6 @@ for (const [i, p] of D.PRODUCTS.entries()) {
 if (!(await Banner.countDocuments())) {
   await Banner.insertMany(D.HERO_SLIDES.map((s, order) => ({ image: s.image, title: s.title, subtitle: s.text, pos: s.pos, button: 'Shop Now', link: '/shop', order })));
 }
-if (!(await Review.countDocuments())) await Review.insertMany(D.REVIEWS);
 for (const [code, c] of Object.entries(D.COUPONS)) {
   await Coupon.updateOne({ code }, { $setOnInsert: { code, type: c.type, value: c.value } }, { upsert: true });
 }

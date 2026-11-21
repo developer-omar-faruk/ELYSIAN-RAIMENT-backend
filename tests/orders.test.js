@@ -17,13 +17,25 @@ beforeAll(async () => {
 afterAll(async () => { await ctx?.stop(); });
 
 describe('products', () => {
+  it('does not publish unverified ratings or review counts', async () => {
+    const { publicProduct } = await import('../src/services/product.service.js');
+    const product = publicProduct({
+      id: 'tp1', slug: 'test-top', name: 'Test Top', category: 'tops', price: 1000,
+      sizes: ['M'], colors: [], stock: 3, images: [], rating: 4.9, reviewCount: 128,
+      sold: 7, createdAt: new Date(), newArrival: false, trending: false, featured: false,
+      description: 'A everyday test item.',
+    });
+    expect(product).toMatchObject({ rating: 0, reviews: 0, popularity: 7, description: 'An everyday test item.' });
+  });
+
   it('publishes products publicly and paginates admin lists', async () => {
     const pub = await request(app).get('/api/public/bootstrap');
     const product = pub.body.products.find((p) => p.id === 'tp1');
     expect(product.price).toBe(1000);
     expect(product).toMatchObject({
-      sizes: ['M', 'L'], colors: [], images: [], reviews: 0, popularity: 0, description: '', fabric: '',
+      sizes: ['M', 'L'], colors: [], images: [], rating: 0, reviews: 0, popularity: 0, description: '', fabric: '',
     });
+    expect(pub.body.reviews).toEqual([]);
     const list = await admin.get('/api/admin/products?limit=1&page=1');
     expect(list.body.items.length).toBe(1);
     expect((await admin.post('/api/admin/products', { name: '', price: -5 })).status).toBe(400);

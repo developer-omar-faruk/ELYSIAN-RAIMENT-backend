@@ -1,5 +1,5 @@
 import { Banner, Category, Product } from '../models/catalog.js';
-import { Order, Review } from '../models/commerce.js';
+import { Order } from '../models/commerce.js';
 import { asyncHandler, HttpError } from '../utils/errors.js';
 import { statusIndex } from '../utils/constants.js';
 import { dbHealthy } from '../config/db.js';
@@ -19,13 +19,12 @@ const strip = (o) => { if (!o) return {}; const { _id, ...rest } = o; return res
 
 export const bootstrap = asyncHandler(async (req, res) => {
   const data = await getBootstrapCache(async () => {
-    const [products, categories, banners, reviews, s] = await Promise.all([
+    const [products, categories, banners, s] = await Promise.all([
       Product.find({ published: true })
         .select('id slug name category price oldPrice sizes colors rating reviewCount stock images newArrival trending featured sold createdAt description fabric')
         .sort({ createdAt: -1 }).lean(),
       Category.find({ published: true }).select('slug name desc image').sort({ order: 1 }).lean(),
       Banner.find({ active: true }).select('image title subtitle pos button link').sort({ order: 1 }).lean(),
-      Review.find({ approved: true }).select('name city rating text image').sort({ createdAt: -1 }).limit(12).lean(),
       getSettings(),
     ]);
     const pub = products.map(publicProduct);
@@ -33,7 +32,7 @@ export const bootstrap = asyncHandler(async (req, res) => {
       products: pub,
       categories: categories.map((c) => ({ slug: c.slug, name: c.name, desc: c.desc, image: c.image })),
       banners: banners.map((b) => ({ image: b.image, title: b.title, text: b.subtitle, pos: b.pos, button: b.button, link: b.link })),
-      reviews: reviews.map((r) => ({ name: r.name, city: r.city, rating: r.rating, text: r.text, image: r.image })),
+      reviews: [],
       home: { featuredIds: pub.filter((p) => p.featured).map((p) => p.id), trendingIds: pub.filter((p) => p.trending).map((p) => p.id) },
       brand: strip(s.brand), contact: strip(s.contact), policies: strip(s.policies), newsletter: strip(s.newsletter),
       zones: s.zones.map((z) => ({ id: z.id, label: z.label, fee: z.fee, note: z.note })),
